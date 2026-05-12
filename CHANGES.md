@@ -13,6 +13,7 @@ Changes:
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
 - Removed star-pagination markers from extracted text #293
+- Post-citation metadata (court, year) no longer leaks across adjacent citations in a string cite when they are separated by a semicolon or newline.
 
 ## Current
 
