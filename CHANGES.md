@@ -8,7 +8,7 @@ Features:
 -
 
 Changes:
--
+- Added regression test asserting WL citations preserve their numeric page even when followed by a star-page pin-cite (e.g. "2024 WL 1880147, at *3").
 
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
