@@ -13,6 +13,7 @@ Changes:
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
 - Removed star-pagination markers from extracted text #293
+- Preserve embedded product or acronym parentheticals (e.g. "(Ranitidine)", "(CRT)") inside "In re ... Litig." case-name captions instead of truncating the caption at the open paren.
 
 ## Current
 
