@@ -673,6 +673,20 @@ class FindTest(TestCase):
             ('In re Foo 1 Mass. 12, 347-348. something something, in at we see that',
              [case_citation(page='12', reporter="Mass.", volume="1",
                             metadata={'defendant': 'Foo', 'pin_cite': '347-348'})]),
+            # Test "In re" MDL-style names with embedded parentheticals
+            # are kept whole through the "Litig." terminator.
+            ('In re Zantac (Ranitidine) Prods. Liab. Litig., 546 F. Supp. 3d 1284 (S.D. Fla. 2021)',
+             [case_citation(page='1284', reporter='F. Supp. 3d', volume='546',
+                            year=2021,
+                            metadata={'defendant': 'Zantac (Ranitidine) Prods. Liab. Litig.',
+                                      'court': 'flsd'})]),
+            ('In re Cathode Ray Tube (CRT) Antitrust Litig., 2020 WL 12345',
+             [case_citation(page='12345', reporter='WL', volume='2020',
+                            metadata={'defendant': 'Cathode Ray Tube (CRT) Antitrust Litig.'})]),
+            # Long-form MDL name with multiple abbreviated tokens before Litig.
+            ('In re Acetaminophen ASD-ADHD Prods. Liab. Litig., 2022 WL 17348351',
+             [case_citation(page='17348351', reporter='WL', volume='2022',
+                            metadata={'defendant': 'Acetaminophen ASD-ADHD Prods. Liab. Litig.'})]),
             # Test U.S. as plaintiff with reference citations
             ('U.S. v. Boch Oldsmobile, Inc., 909 F.2d 657, 660 (1st Cir.1990); Piper Aircraft, 454 U.S. at 241',
              [case_citation(page='657', reporter="F.2d", volume="909",
