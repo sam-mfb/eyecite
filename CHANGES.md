@@ -8,7 +8,7 @@ Features:
 -
 
 Changes:
--
+- Added regression test for citation overlap tiebreaker: phantom citations from unlisted nominative reporters (Wheat., Cranch, Pet., Wall., Dall.) and journal abbreviations (Litig.) silently drop adjacent real citations when the phantom's page coincides with the real citation's volume (refs #221).
 
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
