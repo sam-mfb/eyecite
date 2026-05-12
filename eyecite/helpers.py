@@ -1010,6 +1010,16 @@ def match_on_tokens(
         # If scanning backward, regex must match at end
         regex = rf"(?:{regex})$"
 
+    # When scanning forward across full tokens, track whether we have crossed
+    # a sentence boundary (period or semicolon) or a signal word (e.g. "see",
+    # "see also", "cf.") so that we can stop at the next CitationToken. This
+    # prevents post-citation metadata (court, parenthetical, year, extra) from
+    # a later, unrelated citation from being attributed to an earlier one,
+    # while still allowing parallel citations (e.g. "1 U.S. 12, 1 S. Ct. 2,
+    # 358 (4th Cir. 1982)") — which have only commas/page numbers between
+    # them — to share a trailing court+date parenthetical.
+    crossed_citation_boundary = False
+
     # Append text of each token until we reach max_chars or a stop token:
     for index in indexes:
         token = words[index]
@@ -1019,6 +1029,24 @@ def match_on_tokens(
             break
         if isinstance(token, ParagraphToken):
             break
+        if forward:
+            if isinstance(token, CitationToken):
+                # An intervening citation only blocks the scan once we've
+                # crossed a sentence- or signal-word boundary; without one,
+                # the next citation is a parallel cite to the same case.
+                if crossed_citation_boundary:
+                    break
+            elif isinstance(token, StopWordToken):
+                # Signal words (see, see also, cf., quoting, etc.) start a
+                # new citing sentence.
+                crossed_citation_boundary = True
+            elif isinstance(token, str):
+                # Sentence-ending punctuation (period or semicolon) ends the
+                # current citing sentence. Trailing commas are common between
+                # parallel cites and must not trigger this.
+                stripped = token.rstrip()
+                if stripped.endswith(".") or stripped.endswith(";"):
+                    crossed_citation_boundary = True
 
         # append or prepend text
         if forward:
