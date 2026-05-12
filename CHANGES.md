@@ -13,6 +13,7 @@ Changes:
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
 - Removed star-pagination markers from extracted text #293
+- Capture `metadata.pin_cite` when whitespace precedes the post-citation terminator (e.g. "F.3d 1037, 1042 ."). Previously dropped, making the miss rate appear intermittent depending on upstream text normalization.
 
 ## Current
 
