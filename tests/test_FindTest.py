@@ -1969,3 +1969,78 @@ class FindTest(TestCase):
         citations = get_citations(text)
         self.assertEqual(len(citations), 2)
         mock_warn.assert_not_called()
+
+    def test_court_parenthetical_does_not_propagate_across_citations(self):
+        """A court parenthetical that follows a *later* citation must not be
+        attributed to an *earlier* citation that has no parenthetical of its
+        own.
+
+        Regression test: when two citations sit in the same string-cite and
+        only the second has a court+date parenthetical, the forward
+        post-citation scan from the first citation could greedily match the
+        parenthetical attached to the second citation, populating
+        ``metadata.court`` (and year) on the wrong citation.
+        """
+        test_pairs = [
+            # Period between cites (no semicolon, no signal): first cite has
+            # no parenthetical of its own.
+            (
+                "Foo v. Bar, 100 F.3d 200. Baz v. Qux, 200 F.3d 300 "
+                "(9th Cir. 2018).",
+                [
+                    case_citation(
+                        volume="100",
+                        reporter="F.3d",
+                        page="200",
+                        metadata={
+                            "plaintiff": "Foo",
+                            "defendant": "Bar",
+                        },
+                    ),
+                    case_citation(
+                        volume="200",
+                        reporter="F.3d",
+                        page="300",
+                        year=2018,
+                        metadata={
+                            "plaintiff": "Baz",
+                            "defendant": "Qux",
+                            "court": "ca9",
+                            "year": "2018",
+                        },
+                    ),
+                ],
+            ),
+            # "see also" signal between cites, no semicolon.
+            (
+                "Cal. Native Plant Soc'y v. EPA, 2017 WL 1234567, see also "
+                "Friends of the Wild Swan v. EPA, 12 F.3d 567 "
+                "(D. Haw. 2018).",
+                [
+                    case_citation(
+                        volume="2017",
+                        reporter="WL",
+                        page="1234567",
+                        metadata={
+                            "plaintiff": "Cal. Native Plant Soc'",
+                            "defendant": "EPA",
+                        },
+                    ),
+                    case_citation(
+                        volume="12",
+                        reporter="F.3d",
+                        page="567",
+                        year=2018,
+                        metadata={
+                            "plaintiff": "Friends   Wild Swan",
+                            "defendant": "EPA",
+                            "court": "hid",
+                            "year": "2018",
+                        },
+                    ),
+                ],
+            ),
+        ]
+        self.run_test_pairs(
+            test_pairs, "Court parenthetical propagation across citations"
+        )
