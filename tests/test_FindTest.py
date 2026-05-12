@@ -1133,6 +1133,212 @@ class FindTest(TestCase):
                 f"Nominative reporters getting in the way of parsing: {parsed_cite}",
             )
 
+    def test_overlap_tiebreaker_drops_phantom_for_real_citation(self):
+        """When two citation matches overlap (share the same digit
+        token at the boundary), the EARLIER one should yield to the
+        LATER one when the LATER one is a higher-confidence reporter
+        match.
+
+        eyecite already does this for nominative reporters explicitly
+        listed in `NOMINATIVE_REPORTER_NAMES` (Bee, Deady, Taney) — see
+        PR #237 and issue #221. The same structural pattern arises for:
+
+          - Nominative reporters NOT in that list (Wheat., Cranch,
+            Pet., Wall., Dall., Jones, …)
+          - Journal abbreviations (Litig., …)
+
+        In each case, an unintended `<int> <reporter> <int>` triple
+        in the input gets matched as a citation, and if its `<page>`
+        token IS the next real citation's `<volume>` token, the phantom
+        consumes the boundary digit and the real citation is silently
+        dropped.
+
+        Sources of unintended triples we've seen in practice:
+          - PDF-extraction of line-numbered briefs (line number lands
+            inline before a reporter-name token from the next line)
+          - Footnote-number annotations not stripped from text
+          - Short-form citations: `12 Smith, 400 F.3d 100` where the
+            `12` is a pin-cite-style volume that happens to precede
+            a real F.3d citation
+
+        Each subtest is one in-scope failing case (phantom drops real
+        cite) or one negative case (the fix must not break it).
+        """
+        # In-scope: overlap drops real cite. These currently fail.
+        overlap_drops_real = [
+            # 1. The Auto Parts MDL production case: the journal
+            # abbreviation "Litig." (which IS a real entry in
+            # reporters-db's JOURNALS table) gets matched as a
+            # FullJournalCitation `22 Litig. 2013`, and the real
+            # `2013 WL 12345` is dropped.
+            (
+                "Auto Parts MDL — Litig. journal overlap",
+                "See In re X Antitrust 22 Litig., 2013 WL 12345.",
+                [case_citation(volume="2013", reporter="WL", page="12345")],
+            ),
+            # 2. The Jones production case: surname "Jones" is in
+            # NOMINATIVE_REPORTER_NAMES so the existing tie-breaker
+            # WOULD work — but only when invoked through
+            # `token_is_from_nominative_reporter`. The bug here is
+            # the same shape but for a short-form citation
+            # `12 Jones, 400 F.3d 100` where Jones is a real surname
+            # AND a nominative reporter. The phantom wins.
+            (
+                "Jones surname overlap",
+                "See 12 Jones, 400 F.3d 100.",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+            # 3-7. The same structural pattern for nominative
+            # reporters NOT in NOMINATIVE_REPORTER_NAMES. These
+            # demonstrate the bug is broader than the existing
+            # hand-maintained denylist — the fix should generalize.
+            (
+                "Wheat. (Wheaton, not in nominative list)",
+                "See note 12 Wheat., 400 F.3d 100.",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+            (
+                "Cranch (not in nominative list)",
+                "See note 12 Cranch, 400 F.3d 100.",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+            (
+                "Pet. (Peters, not in nominative list)",
+                "See note 12 Pet., 400 F.3d 100.",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+            (
+                "Wall. (Wallace, not in nominative list)",
+                "See note 12 Wall., 400 F.3d 100.",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+            (
+                "Dall. (Dallas, not in nominative list)",
+                "See note 12 Dall., 400 F.3d 100.",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+            # 8. The same overlap in mid-string-cite context — the
+            # phantom drops the second real cite while leaving the
+            # first untouched.
+            (
+                "String cite — phantom drops only the overlapping cite",
+                "Cf. Smith, 350 F.3d 200; see also 12 Jones, 400 F.3d 100.",
+                [
+                    case_citation(volume="350", reporter="F.3d", page="200"),
+                    case_citation(volume="400", reporter="F.3d", page="100"),
+                ],
+            ),
+        ]
+
+        # Negative cases — these MUST remain unchanged after the fix.
+        # If any of these starts dropping citations, the fix is too
+        # aggressive.
+        no_drop_expected = [
+            # Parallel citation — three reporters for the same case.
+            # Each is its own match; none overlap at the boundary.
+            (
+                "Parallel cite — U.S. + S. Ct. + L. Ed.",
+                "Shapiro v. Thompson, 394 U.S. 618, 89 S. Ct. 1322, "
+                "22 L. Ed. 2d 600 (1969).",
+                [
+                    case_citation(volume="394", reporter="U.S.", page="618"),
+                    case_citation(volume="89", reporter="S. Ct.", page="1322"),
+                    case_citation(
+                        volume="22", reporter="L. Ed. 2d", page="600"
+                    ),
+                ],
+            ),
+            # Two distinct string-cite citations with no overlap.
+            (
+                "Two non-overlapping F.3d cites",
+                "See Smith, 350 F.3d 200; cf. Brown, 410 F.3d 500.",
+                [
+                    case_citation(volume="350", reporter="F.3d", page="200"),
+                    case_citation(volume="410", reporter="F.3d", page="500"),
+                ],
+            ),
+            # Standalone nominative-reporter citation with no
+            # overlapping competitor. This IS a real Wheaton cite
+            # and must continue to parse.
+            (
+                "Real Wheaton cite standalone",
+                "See 12 Wheat. 200 (1827).",
+                [
+                    case_citation(
+                        volume="12",
+                        reporter="Wheat.",
+                        page="200",
+                    )
+                ],
+            ),
+            # Same for Cranch.
+            (
+                "Real Cranch cite standalone",
+                "See 5 Cranch 137 (1803).",
+                [
+                    case_citation(
+                        volume="5",
+                        reporter="Cranch",
+                        page="137",
+                    )
+                ],
+            ),
+            # Existing NOMINATIVE_REPORTER_NAMES tie-breaker should
+            # continue to fire. This case currently passes and must
+            # continue to pass.
+            (
+                "Bee (already in nominative list) — overlap dropped",
+                "see note 12 Bee, 400 F.3d 100",
+                [case_citation(volume="400", reporter="F.3d", page="100")],
+            ),
+        ]
+
+        for label, text, expected in overlap_drops_real:
+            with self.subTest(label=f"BUG: {label}"):
+                parsed = get_citations(text)
+                self.assertEqual(
+                    [
+                        (
+                            c.groups.get("volume"),
+                            c.groups.get("reporter"),
+                            c.groups.get("page"),
+                        )
+                        for c in parsed
+                    ],
+                    [
+                        (
+                            e.groups.get("volume"),
+                            e.groups.get("reporter"),
+                            e.groups.get("page"),
+                        )
+                        for e in expected
+                    ],
+                    f"[BUG: {label}] phantom drops real citation in: {text!r}",
+                )
+
+        for label, text, expected in no_drop_expected:
+            with self.subTest(label=f"NEGATIVE: {label}"):
+                parsed = get_citations(text)
+                self.assertEqual(
+                    [
+                        (
+                            c.groups.get("volume"),
+                            c.groups.get("reporter"),
+                            c.groups.get("page"),
+                        )
+                        for c in parsed
+                    ],
+                    [
+                        (
+                            e.groups.get("volume"),
+                            e.groups.get("reporter"),
+                            e.groups.get("page"),
+                        )
+                        for e in expected
+                    ],
+                    f"[NEGATIVE: {label}] unexpected drop in: {text!r}",
+                )
+
     def test_custom_tokenizer(self):
         extractors = []
         for e in EXTRACTORS:
