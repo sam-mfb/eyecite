@@ -225,11 +225,13 @@ PIN_CITE_REGEX = rf"""
         # optional additional page numbers
         (?:,\ ?{PIN_CITE_TOKEN_REGEX})*
         # pin cite must be followed by one of these so it doesn't capture
-        # start of next citation
+        # start of next citation. An optional space is allowed before the
+        # terminator so we still capture the pin cite when source text has
+        # been re-spaced (e.g. ``1042 .`` or ``1042 ;``) — the lookahead is
+        # only there to reject capturing the start of the next citation.
         (?=
-            [,.;)\]\\]|  # ending punctuation
-            \ ?[(\[]|    # space and start of parens
-            $            # end of text
+            \ ?[,.;)\]\\(\[]|  # optional space + ending punctuation/parens
+            \ ?$               # optional trailing space + end of text
         )
     )
 """
