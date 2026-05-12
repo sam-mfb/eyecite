@@ -5,7 +5,7 @@
 The following changes are not yet released, but are code complete:
 
 Features:
--
+- Extract docket numbers (No., Civil Action No., Case No., Crim. No., with optional court prefix and judge initials hyphenated or parenthesized) from text adjacent to citations into a new optional `FullCaseCitation.Metadata.docket_number` field.
 
 Changes:
 -
