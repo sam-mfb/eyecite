@@ -175,7 +175,31 @@ def _initialize_search_state(citation: CaseCitation) -> dict[str, Any]:
         "title_starting_index": citation.index - 1,
         "case_name_length": 0,
         "plaintiff_length": 0,
+        # True once we have walked past an MDL-style terminator
+        # ("Litig.", "Litigation", "MDL") while scanning backwards.
+        # While set, internal product-name parentheticals such as
+        # "(Ranitidine)" or "(CRT)" embedded in the caption should NOT
+        # cause the scan to terminate.
+        "in_mdl_caption": False,
     }
+
+
+# Tokens that terminate an "In re ... " MDL caption on the right
+# (scanned in reverse, so these are seen *before* the rest of the
+# caption). Compared after stripping a trailing comma.
+_MDL_TERMINATORS = frozenset(
+    {
+        "Litig.",
+        "Litigation",
+        "MDL",
+        "M.D.L.",
+    }
+)
+
+
+def _is_mdl_terminator(word_str: str) -> bool:
+    """True if the token is an MDL-caption terminator like "Litig.,"."""
+    return word_str.rstrip(",") in _MDL_TERMINATORS
 
 
 def _scan_for_case_boundaries(
@@ -231,8 +255,23 @@ def _scan_for_case_boundaries(
             state["pre_cite_year"] = word_str[1:5]
             continue
 
-        # Break on opening parenthesis after first word
-        if word_str.startswith("(") and state["case_name_length"] > 3:
+        # Detect that we're walking back through an "In re ..." MDL
+        # caption ("... Prods. Liab. Litig.", "... Antitrust Litig.",
+        # "... MDL No. 1917, ..."). Once flagged, embedded product
+        # parentheticals like "(Ranitidine)" or "(CRT)" should not
+        # terminate the case-name scan.
+        if not state["in_mdl_caption"] and _is_mdl_terminator(word_str):
+            state["in_mdl_caption"] = True
+
+        # Break on opening parenthesis after first word, UNLESS we are
+        # inside an MDL caption (in which case the paren is an embedded
+        # product / acronym parenthetical, not a court/year parenthetical
+        # for *this* citation).
+        if (
+            word_str.startswith("(")
+            and state["case_name_length"] > 3
+            and not state["in_mdl_caption"]
+        ):
             state["start_index"] = index
             if (
                 word_str == "("
