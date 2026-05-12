@@ -516,6 +516,10 @@ class FullCaseCitation(CaseCitation, FullCitation):
         defendant: str | None = None
         extra: str | None = None
         antecedent_guess: str | None = None
+        # Docket number found between the case name and the reporter cite,
+        # e.g. "No. 22-cv-1234" or "Civil Action No. 1:21-cv-08526-JMF".
+        # Stored without the "No." prefix.
+        docket_number: str | None = None
         # May be populated after citation resolution
         resolved_case_name_short: str | None = None
         resolved_case_name: str | None = None

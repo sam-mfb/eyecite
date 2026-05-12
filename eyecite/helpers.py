@@ -27,6 +27,7 @@ from eyecite.models import (
     Tokens,
 )
 from eyecite.regexes import (
+    DOCKET_NUMBER_REGEX,
     POST_FULL_CITATION_REGEX,
     POST_JOURNAL_CITATION_REGEX,
     POST_LAW_CITATION_REGEX,
@@ -35,6 +36,8 @@ from eyecite.regexes import (
     STOP_WORD_REGEX,
     YEAR_REGEX,
 )
+
+_DOCKET_NUMBER_RE = re.compile(DOCKET_NUMBER_REGEX, flags=re.VERBOSE)
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +372,12 @@ def _process_case_name(
     else:
         defendant = candidate_case_name
 
+    # If a docket number is embedded after the defendant (e.g.
+    # "Doe, Civil Action No. 1:21-cv-08526-JMF"), pull it onto the metadata
+    # and strip it (and any leading docket-type prefix) from the defendant.
+    if isinstance(defendant, str):
+        defendant = _extract_docket_number(citation, defendant)
+
     # Clean up defendant name
     clean_def = strip_stop_words(defendant)
 
@@ -399,6 +408,27 @@ def _process_case_name(
 
 
 # Helper functions to improve readability
+
+
+def _extract_docket_number(citation: CaseCitation, text: str) -> str:
+    """Pull a docket number out of ``text`` and onto ``citation.metadata``.
+
+    Returns ``text`` with the docket number (and its "No." / "Civil Action
+    No." / etc. prefix) removed, so callers can keep using the remainder as
+    the defendant or candidate case name.
+
+    If ``text`` does not match a docket pattern, returns it unchanged.
+    """
+    m = _DOCKET_NUMBER_RE.search(text)
+    if not m:
+        return text
+    citation.metadata.docket_number = m.group("docket")
+    # Remove the whole match (prefix + "No." + docket) and any
+    # surrounding comma/space that would otherwise dangle.
+    cleaned = (text[: m.start()] + text[m.end() :]).strip()
+    cleaned = re.sub(r"\s*,\s*,\s*", ", ", cleaned)
+    cleaned = cleaned.strip(" ,")
+    return cleaned
 
 
 def _extract_text(words: list[Any], start: int, end: int) -> str:

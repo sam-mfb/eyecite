@@ -395,3 +395,50 @@ POST_JOURNAL_CITATION_REGEX = rf"""
 
 # A simple regex to check if year precedes citation
 DEFENDANT_YEAR_REGEX = r"(?P<defendant>.*)\s\((?P<year>\d{4})\)$"
+
+# Docket number regex:
+# Capture a docket number that appears between a case name and a reporter
+# citation. Handles several common variants documented in the original bug:
+#   - bare hyphenated "No. 22-cv-1234"
+#   - multi-word prefixes "Civil Action No.", "Case No.", "Crim. No.",
+#     "Cr. No.", "MDL No."
+#   - optional court prefix like "1:22-cv-01234"
+#   - docket-type tags: cv, cr, md, mc, mj, crim
+#   - judge-initials suffix: "-JMF" or " (PKC)"
+#   - untyped hyphenated "No. 22-1234"
+#   - bare numeric after MDL/Crim./Cr./Case/Civil Action prefix
+# The capture is intentionally restricted to hyphenated docket numbers (or
+# bare digits behind a prefix). Old-style space-separated docket numbers
+# like "99 Civ. 9404 (SHS)" are deliberately NOT matched here.
+# The number itself is exposed in the named group ``docket``; the optional
+# prefix word(s) (e.g. "Civil Action ") is in ``docket_prefix``.
+DOCKET_NUMBER_REGEX = r"""
+    (?P<docket_prefix>
+        Civil\ Action\ |
+        Case\ |
+        Crim\.\ |
+        Cr\.\ |
+        MDL\
+    )?
+    No\.\ +
+    (?P<docket>
+        (?:\d{1,2}:)?              # optional court prefix "1:"
+        \d{2,4}                    # year or first segment
+        (?:
+            -(?:cv|cr|md|mc|mj|crim) # typed docket-tag
+            -\d{2,6}                 # case number
+            (?:-[A-Z]{2,5}(?:-[A-Z]{2,5})?)?  # judge initials "-JMF"
+            (?:\ ?\([A-Z]{2,5}\))?            # judge initials "(PKC)"
+            |
+            -\d{2,6}                 # untyped: "22-1234"
+            (?:-[A-Z]{2,5})?
+            (?:\ ?\([A-Z]{2,5}\))?
+            |
+                                      # bare "MDL No. 3043"
+        )
+    )
+    # Don't match if followed by an old-style two-letter docket tag --
+    # those are space-separated dockets like "99 Civ. 9404" that we
+    # deliberately leave alone for now.
+    (?!\ (?:Civ|Cr|Crim|MC|MJ|MD)\.?\ \d)
+"""
