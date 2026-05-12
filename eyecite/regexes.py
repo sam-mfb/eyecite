@@ -308,7 +308,12 @@ POST_FULL_CITATION_REGEX = rf"""
         [\(\[] # opening paren or bracket
         (?:
             (?:
-                (?P<court>.*?) # treat anything before date as court
+                # treat anything before date as court, but stop at a
+                # semicolon or newline so the match cannot leak into an
+                # adjacent citation in the same paragraph. The prior `.*?`
+                # would happily consume `);` and pick up a *later* citation's
+                # `(Court Year)` paren as if it belonged to this one.
+                (?P<court>[^;\n]*?)
                 (?= # lookahead to stop when we see a month or year
                     \s+{MONTH_REGEX} |
                     \s+{YEAR_REGEX}
