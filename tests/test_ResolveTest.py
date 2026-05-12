@@ -4,7 +4,13 @@ from unittest import TestCase
 from eyecite import get_citations
 from eyecite.find import extract_reference_citations
 from eyecite.helpers import filter_citations
-from eyecite.models import Document, FullCitation, Resource
+from eyecite.models import (
+    Document,
+    FullCaseCitation,
+    FullCitation,
+    IdCitation,
+    Resource,
+)
 from eyecite.resolve import resolve_citations
 
 
@@ -351,6 +357,71 @@ class ResolveTest(TestCase):
                 "This should fail to resolve because the reporter and citation is ambiguous, 1 U. S., at 51.",
             ),
             (2, "However, this should succeed, Lorem, 1 U.S., at 52."),
+        )
+
+    def test_id_chain_anchor_after_signal_string_cite(self):
+        """`Id.` after a `See also`/`Cf.`/`But see` string-cite block should
+        bind to the anchor full-cite that precedes the signal block, not to
+        the most-recent intervening signal-introduced citation.
+
+        The paragraph below is "about" Mills; the `See also Jovel; Carter`
+        cites are subordinate by-the-way citations. A subsequent
+        `Id. at 1044` is conventionally read as a pin-cite back to Mills.
+
+        Today, eyecite binds `Id.` to whichever `FullCitation` immediately
+        precedes it (Carter), regardless of any intervening signal. This
+        test documents the desired behavior; the underlying semantic
+        question (how aggressively to skip signal-introduced cites) is a
+        judgment call for upstream maintainers.
+
+        See: https://github.com/freelawproject/eyecite/issues — `Id.`
+        chain rebinding when intervening string cites or footnotes
+        interrupt the chain.
+        """
+        text = (
+            "Mills v. Warner-Lambert, 581 F.3d 1037, 1042 (10th Cir. 2009) "
+            "held X. See also Jovel v. Boiron, 2013 WL 12164622 (C.D. Cal. "
+            "2013); Carter v. Novartis, 582 F. Supp. 2d 1000 (C.D. Cal. "
+            "2008). Id. at 1044."
+        )
+        citations = get_citations(text)
+
+        # Sanity: we got three full-cites and one Id.
+        full_cites = [c for c in citations if isinstance(c, FullCaseCitation)]
+        id_cites = [c for c in citations if isinstance(c, IdCitation)]
+        self.assertEqual(
+            len(full_cites),
+            3,
+            f"Expected 3 FullCaseCitations, got {len(full_cites)}",
+        )
+        self.assertEqual(
+            len(id_cites),
+            1,
+            f"Expected 1 IdCitation, got {len(id_cites)}",
+        )
+
+        mills = next(c for c in full_cites if c.metadata.plaintiff == "Mills")
+        id_cite = id_cites[0]
+
+        resolutions = resolve_citations(citations)
+
+        # Find which resource the Id. cite resolved to.
+        id_resource = None
+        for resource, members in resolutions.items():
+            if id_cite in members:
+                id_resource = resource
+                break
+
+        self.assertIsNotNone(
+            id_resource,
+            "Id. cite was not resolved at all; expected resolution to Mills.",
+        )
+        self.assertIs(
+            id_resource.citation,
+            mills,
+            "Id. at 1044 should resolve to the Mills anchor that precedes "
+            "the `See also` string-cite block, not to a signal-introduced "
+            "intervening cite.",
         )
 
     def test_reference_resolution(self):
