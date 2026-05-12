@@ -1969,3 +1969,45 @@ class FindTest(TestCase):
         citations = get_citations(text)
         self.assertEqual(len(citations), 2)
         mock_warn.assert_not_called()
+
+    def test_post_citation_does_not_pollute_from_adjacent_citation(self):
+        """An earlier citation's post-citation metadata must not be drawn from
+        a later citation's court/year parenthetical that lives in the same
+        paragraph.
+
+        Reproduction: when citation A is followed by a non-court parenthetical
+        like "(overruled on other grounds);" before citation B's
+        "(C.D. Cal. 2013)" parenthetical, the post-citation regex used to
+        greedily scan past the semicolon and adopt B's year (and inflate A's
+        full_span_end into B's territory). Each citation's post-citation
+        metadata must come only from text that precedes the next citation.
+        """
+        text = (
+            "Mills v. Warner-Lambert, 581 F.3d 1037 "
+            "(overruled on other grounds); "
+            "Jovel v. Boiron, 2013 WL 12164622 (C.D. Cal. 2013)."
+        )
+        cites = get_citations(text)
+        self.assertEqual(len(cites), 2)
+        mills, jovel = cites[0], cites[1]
+
+        # Mills should not inherit Jovel's year ("2013").
+        self.assertNotEqual(
+            mills.metadata.year,
+            "2013",
+            "Mills's year was pulled from Jovel's parenthetical",
+        )
+
+        # Mills's full span must not extend past the semicolon into Jovel's
+        # text. full_span() falls back to the citation's own span when no
+        # post-citation metadata is attached.
+        semicolon_idx = text.index(";")
+        self.assertLessEqual(
+            mills.full_span()[1],
+            semicolon_idx + 1,
+            "Mills's full_span leaked into Jovel's citation region",
+        )
+
+        # Jovel's own metadata should still be extracted correctly.
+        self.assertEqual(jovel.metadata.court, "cacd")
+        self.assertEqual(jovel.metadata.year, "2013")
