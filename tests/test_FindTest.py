@@ -1969,3 +1969,52 @@ class FindTest(TestCase):
         citations = get_citations(text)
         self.assertEqual(len(citations), 2)
         mock_warn.assert_not_called()
+
+    def test_pin_cite_with_space_before_post_punctuation(self):
+        """Regression test for the bug documented in issue draft #7:
+        `metadata.pin_cite` is dropped when the pin-cite digits are followed
+        by a space and then non-paren terminal punctuation (period,
+        semicolon, end-of-text without trailing punctuation, etc.).
+
+        The same citation re-formatted with no intervening space — e.g.
+        ``... 1042.`` vs ``... 1042 .`` — parses correctly. The
+        ``PIN_CITE_REGEX`` lookahead currently accepts
+        ``[,.;)\\]\\\\]``, ``\\ ?[(\\[]``, or ``$``, but does NOT accept
+        whitespace before the non-paren terminators, so production text
+        that has been re-spaced (e.g. by OCR cleanup or HTML
+        normalization) sees an intermittent miss for the same logical
+        citation.
+
+        Each variant below contains the same logical citation
+        ``581 F.3d 1037, 1042`` and the pin_cite should always be
+        ``"1042"``.
+        """
+        variants = [
+            # Variants from the issue draft's acceptance test shape.
+            "Mills v. Warner-Lambert, 581 F.3d 1037, 1042 (10th Cir. 2009)",
+            "Mills v. Warner-Lambert, 581 F.3d 1037, 1042 (10th Cir. 2009).",
+            "Mills v. Warner-Lambert, 581 F.3d 1037, 1042 .",
+            "Mills v. Warner-Lambert, 581 F.3d 1037, 1042",
+            "Mills v. Warner-Lambert, 581 F.3d 1037, 1042 ; see also Foo",
+            "(Mills v. Warner-Lambert, 581 F.3d 1037, 1042 (10th Cir. 2009))",
+            # Plain-citation reductions that isolate the post-cite token.
+            "581 F.3d 1037, 1042",
+            "581 F.3d 1037, 1042 ",
+            "581 F.3d 1037, 1042.",
+            "581 F.3d 1037, 1042 .",
+            "581 F.3d 1037, 1042;",
+            "581 F.3d 1037, 1042 ;",
+            "see 581 F.3d 1037, 1042 . And then more text.",
+        ]
+        for text in variants:
+            with self.subTest(text=text):
+                cites = get_citations(text)
+                self.assertTrue(
+                    cites, f"expected at least one citation in {text!r}"
+                )
+                self.assertEqual(
+                    cites[0].metadata.pin_cite,
+                    "1042",
+                    f"pin_cite was {cites[0].metadata.pin_cite!r} "
+                    f"(expected '1042') in {text!r}",
+                )
