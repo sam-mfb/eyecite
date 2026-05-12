@@ -13,6 +13,7 @@ Changes:
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
 - Removed star-pagination markers from extracted text #293
+- Court parenthetical no longer propagates backward across a sentence boundary (period, semicolon, or signal word) to a preceding citation that lacked its own parenthetical.
 
 ## Current
 
