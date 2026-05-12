@@ -8,7 +8,7 @@ Features:
 -
 
 Changes:
--
+- Added regression test demonstrating Id. citations resolve to the wrong anchor when intervening signal-cite citations (See also, Cf., But see, …) break the chain between the anchor full-cite and the Id.
 
 Fixes:
 - Modifies rendering of AhocorasickTokenizer parameter in API docs II
