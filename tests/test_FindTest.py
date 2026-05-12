@@ -1969,3 +1969,75 @@ class FindTest(TestCase):
         citations = get_citations(text)
         self.assertEqual(len(citations), 2)
         mock_warn.assert_not_called()
+
+    def test_docket_number_extraction(self):
+        """Docket numbers embedded between case name and reporter should be
+        surfaced in metadata.docket_number and stripped from defendant.
+
+        Covers variants known to miss in production:
+          - bare ``No. <num>``
+          - ``Case No. ...``
+          - ``Civil Action No. ...``
+          - ``Crim. No. ...``
+          - judge initials suffix ``-JMF`` or ``(PKC)``
+          - court prefix like ``1:22``
+          - docket-type tags: ``cv``, ``md``, ``cr``
+        """
+        test_pairs = [
+            (
+                "Smith v. Jones, No. 22-cv-1234, 2024 WL 1880147 (E.D.N.Y. May 1, 2024)",
+                "22-cv-1234",
+                "Jones",
+            ),
+            (
+                "United States v. Doe, Civil Action No. 1:21-cv-08526-JMF, 2023 WL 4976589 (S.D.N.Y. 2023)",
+                "1:21-cv-08526-JMF",
+                "Doe",
+            ),
+            (
+                "In re Foo Litig., Case No. 4:20-md-02924, 2022 WL 17348351 (S.D. Fla. 2022)",
+                "4:20-md-02924",
+                None,
+            ),
+            (
+                "Bar v. Baz, No. 19-cv-06002 (PKC), 2021 WL 827190 (S.D.N.Y. Feb. 3, 2021)",
+                "19-cv-06002 (PKC)",
+                "Baz",
+            ),
+            (
+                "United States v. Roe, Crim. No. 22-1234, 2023 WL 555 (D.D.C. 2023)",
+                "22-1234",
+                "Roe",
+            ),
+            (
+                "Smith v. Jones, No. 22-1234, 2024 WL 1880147 (E.D.N.Y. May 1, 2024)",
+                "22-1234",
+                "Jones",
+            ),
+            (
+                "Quux v. Quuux, No. 1:22-cv-01234-JMF, 2023 WL 5555 (S.D.N.Y. 2023)",
+                "1:22-cv-01234-JMF",
+                "Quuux",
+            ),
+        ]
+        for text, expected_docket, expected_defendant in test_pairs:
+            with self.subTest(text=text):
+                cites = get_citations(text)
+                self.assertEqual(
+                    len(cites),
+                    1,
+                    f"expected exactly 1 citation for {text!r}",
+                )
+                cite = cites[0]
+                self.assertIsInstance(cite, FullCaseCitation)
+                self.assertEqual(
+                    cite.metadata.docket_number,
+                    expected_docket,
+                    f"docket_number mismatch for {text!r}",
+                )
+                if expected_defendant is not None:
+                    self.assertEqual(
+                        cite.metadata.defendant,
+                        expected_defendant,
+                        f"defendant mismatch for {text!r}",
+                    )
