@@ -841,6 +841,80 @@ class FindTest(TestCase):
         # fmt: on
         self.run_test_pairs(test_pairs, "Citation extraction")
 
+    def test_wl_star_pin_cite_page_invariant(self):
+        """Regression guard: for a Westlaw (``WL``) citation, the ``page``
+        group must always be the WL document number (digits) and never the
+        star-page from a pin-cite (e.g. ``*3``).
+
+        See draft issue
+        ``opinion_search/issue_draft_eyecite_6_wl_pin_cite.md``: in a small
+        number of federal-court citations, ``2024 WL 1880147, at *3`` was
+        observed to parse with ``page == "*3"`` (the WL number dropped),
+        producing an unresolvable citation that nonetheless looked valid.
+        These tests pin down the invariant that the WL document number is
+        preserved in ``page`` and the star-page goes to
+        ``metadata.pin_cite`` instead.
+        """
+        cases = [
+            # (text, volume, page, pin_cite_or_None)
+            (
+                "2024 WL 1880147, at *3 (E.D.N.Y. 2024)",
+                "2024",
+                "1880147",
+                "at *3",
+            ),
+            ("2024 WL 1880147, *3", "2024", "1880147", "*3"),
+            ("2024 WL 1880147", "2024", "1880147", None),
+            ("2024 WL 1880147, at 3", "2024", "1880147", "at 3"),
+            (
+                "Smith v. Jones, 2024 WL 1880147, at *3 (E.D.N.Y. May 1, 2024)",
+                "2024",
+                "1880147",
+                "at *3",
+            ),
+        ]
+        for tokenizer in tested_tokenizers:
+            for text, volume, page, pin in cases:
+                with self.subTest(
+                    "WL star pin-cite invariant",
+                    tokenizer=type(tokenizer).__name__,
+                    text=text,
+                ):
+                    cites = get_citations(text, tokenizer=tokenizer)
+                    wl_cites = [
+                        c
+                        for c in cites
+                        if isinstance(c, FullCaseCitation)
+                        and c.groups.get("reporter") == "WL"
+                    ]
+                    self.assertEqual(
+                        len(wl_cites),
+                        1,
+                        f"Expected exactly one WL citation for {text!r}, got {cites!r}",
+                    )
+                    c = wl_cites[0]
+                    self.assertEqual(c.groups.get("volume"), volume)
+                    # The core invariant: page must be the WL document
+                    # number (all digits), never a star-page like "*3".
+                    self.assertEqual(
+                        c.groups.get("page"),
+                        page,
+                        f"Expected page={page!r} for {text!r}, "
+                        f"got page={c.groups.get('page')!r} "
+                        f"(pin_cite={c.metadata.pin_cite!r})",
+                    )
+                    self.assertTrue(
+                        (c.groups.get("page") or "").isdigit(),
+                        f"WL page must be all digits; got "
+                        f"{c.groups.get('page')!r} for {text!r}",
+                    )
+                    self.assertEqual(
+                        c.metadata.pin_cite,
+                        pin,
+                        f"Expected pin_cite={pin!r} for {text!r}, "
+                        f"got {c.metadata.pin_cite!r}",
+                    )
+
     def test_find_law_citations(self):
         """Can we find citations from laws.json?"""
         # fmt: off
